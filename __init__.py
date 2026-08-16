@@ -71,6 +71,16 @@ HEALTH_VIAL_NAMES = frozenset((
     "HealthVial_3",
     "HealthVial_4",
     "HealthVial_5",
+    # "Healing Kit" tiers (Minor/Light/Healing Kit/Greater/Super Healing Kit) -
+    # a separate item family from the "Insta-Health Vial" tiers above, both
+    # confirmed in gd_HealthDrops.INT. Missed entirely until a "Healing Kit"
+    # pickup was reported not auto-collecting (still showing [F] PICK UP) -
+    # this mod only ever tracked the Vial names, not the Pack names.
+    "HealthPack_1",
+    "HealthPack_2",
+    "HealthPack_3",
+    "HealthPack_4",
+    "HealthPack_5",
 ))
 
 
@@ -136,7 +146,20 @@ def collect_pickup(controller, pickupable) -> tuple[bool, str]:
     """
     if not controller.HasRoomInInventoryFor(pickupable):
         return False, "HasRoomInInventoryFor=False"
-    if not controller.WorldInfo.Game.PickupQuery(controller.Pawn, pickupable):
+    game = controller.WorldInfo.Game
+    if game is None:
+        # WorldInfo.Game is only ever populated on the server - confirmed in
+        # WillowPlayerController.uc: the game's own equivalent flow
+        # (ServerPickupSomething/AllPlayersPickupQuery) is a `reliable server
+        # function` specifically so PickupQuery always runs where Game is
+        # valid. Called directly from a remote multiplayer client (not the
+        # host), Game is always None here and this used to throw
+        # AttributeError on every single pickup attempt, spamming the log.
+        # Auto-pickup only works for the host until this has a real
+        # server-RPC path (untested territory - not guessed at here).
+        # Manual [F] pickup is unaffected.
+        return False, "not the host (WorldInfo.Game is None on remote clients)"
+    if not game.PickupQuery(controller.Pawn, pickupable):
         return False, "PickupQuery=False"
     if controller.ShouldUseCoopRange(pickupable):
         controller.CloneAndGiveToCoopPawns(pickupable, False)
