@@ -1,0 +1,24 @@
+[project]
+name = "AutopickupBL1E"
+version = "1.5.2"
+authors = [
+    { name = "Miner Of Worlds and RedxYeti" },
+    { name = "galqawala" },
+]
+description = """\
+Automatically picks up ammo, currency, and health vials in BL1E. A BL1E \
+(GOTY Enhanced) port of Miner Of Worlds and RedxYeti's original BL1 \
+"Auto-Pickup SDK" mod, rewritten to hook the game's own pickup-spawn/rest/aim \
+events instead of patching item flags.
+"""
+
+[tool.sdkmod]
+name = "AutopickupBL1E"
+supported_games = ["BL1E"]
+coop_support = "Unknown"
+auto_enable = true
+download = "https://github.com/galqawala/AutopickupBL1E/raw/refs/heads/master/AutopickupBL1E.sdkmod"
+
+[tool.sdkmod.license]
+name = "GPL3"
+url = "https://choosealicense.com/licenses/gpl-3.0/"
