@@ -1,6 +1,6 @@
 [project]
 name = "AutopickupBL1E"
-version = "1.5.4"
+version = "1.5.5"
 authors = [
     { name = "Miner Of Worlds and RedxYeti" },
     { name = "galqawala" },

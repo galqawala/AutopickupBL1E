@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 
 from mods_base import BoolOption, SETTINGS_DIR, build_mod, get_pc, hook
@@ -131,6 +132,37 @@ def log_throttled(now: float, message: str) -> None:
     logging.info(message)
 
 
+def dist(a, b) -> float:
+    return math.sqrt((b.X - a.X) ** 2 + (b.Y - a.Y) ** 2 + (b.Z - a.Z) ** 2)
+
+
+def within_reach(controller, pickupable) -> bool:
+    """Whether this pickup is within the game's own normal pickup reach.
+
+    SpawnPickupParticles/PickupAtRest fire for every pickup that exists
+    anywhere in the loaded level, with no proximity of their own at all -
+    unlike TouchedPickupable/SawPickupable, which the engine itself only
+    fires once a pawn is actually close to or aiming at the pickup. Without
+    this check, any pickup that spawns far from the player (e.g. mission
+    tally items placed around a level, or handed out by a scripted event at
+    a distance) got collected instantly the moment it existed, regardless of
+    how far away the player actually was - confirmed in play as objective
+    items appearing to "teleport" to the player from across the map.
+
+    PlayerInteractionDistance is the same field AutoLootBL1E's own pickup
+    range check already uses, and is what governs the native [F] PICK UP
+    prompt/TouchedPickupable-SawPickupable range in the first place - so a
+    pickup this lets through was always going to become reachable within a
+    few steps anyway, this just stops it happening from across the map.
+    """
+    try:
+        max_dist = controller.GetWillowGlobals().GetGlobalsDefinition().PlayerInteractionDistance
+        return dist(controller.Pawn.Location, pickupable.Location) <= max_dist
+    except Exception as ex:  # noqa: BLE001
+        logging.warning(f"[Autopickup] could not check pickup range: {ex!r}")
+        return False
+
+
 def collect_pickup(controller, pickupable) -> tuple[bool, str]:
     """Give a pickup straight to the player, the same way a manual pickup would.
 
@@ -233,6 +265,10 @@ def try_auto_collect(obj: UObject, trigger: str) -> None:
     controller = get_pc()
     if controller is None or controller.Pawn is None:
         log_throttled(now, f"[Autopickup] trace[{trigger}]: {item_name} -> no controller/pawn yet, skipping")
+        return
+
+    if not within_reach(controller, obj):
+        log_throttled(now, f"[Autopickup] trace[{trigger}]: {item_name} -> out of reach, leaving for manual pickup")
         return
 
     try:
