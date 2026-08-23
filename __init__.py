@@ -240,42 +240,38 @@ def try_auto_collect(obj: UObject, trigger: str) -> None:
     option = option_for(item_def, is_mission_item, class_name)
     now = obj.WorldInfo.TimeSeconds
 
-    # Trace logging: this hook was rewritten from scratch on 2026-08-15 and,
-    # until now, only ever logged the exception case - a miss that reached no
-    # option at all, or one whose option was simply off, left no trace
-    # anywhere. Every pickup event for a WillowUsableItem is logged here so a
-    # "didn't get picked up" report can be matched to an exact gate instead
-    # of re-guessed from source. Throttled (see log_throttled) since the
-    # "seen" trigger can repeat every tick for an unchanging outcome.
-    if option is None:
-        log_throttled(
-            now,
-            f"[Autopickup] trace[{trigger}]: {item_name} (mission_item={is_mission_item})"
-            " -> no matching option, left for manual pickup",
-        )
-        return
-    if not option.value:
-        log_throttled(
-            now,
-            f"[Autopickup] trace[{trigger}]: {item_name} -> option '{option.display_name}'"
-            " is off, skipping",
-        )
+    # No option matched, the matching option is off, no pawn yet, or out of
+    # reach are all routine, expected outcomes - most pickups in a level are
+    # untracked or simply far away, and SawPickupable re-enters this every
+    # tick while merely aiming at one. None of that is worth a log line any
+    # more (it was, briefly, while this hook was being rewritten from
+    # scratch and every gate needed to be checkable from a report - see git
+    # history). Only an actual collection attempt is logged now.
+    if option is None or not option.value:
         return
 
     controller = get_pc()
     if controller is None or controller.Pawn is None:
-        log_throttled(now, f"[Autopickup] trace[{trigger}]: {item_name} -> no controller/pawn yet, skipping")
         return
 
     if not within_reach(controller, obj):
-        log_throttled(now, f"[Autopickup] trace[{trigger}]: {item_name} -> out of reach, leaving for manual pickup")
         return
 
     try:
         success, reason = collect_pickup(controller, obj)
-        log_throttled(now, f"[Autopickup] trace[{trigger}]: {item_name} -> collect_pickup {reason}")
     except Exception as ex:  # noqa: BLE001
         logging.warning(f"[Autopickup] could not auto-collect {item_name} ({trigger}): {ex!r}")
+        return
+
+    if success:
+        # A real, one-time event per item - never repeats for the same
+        # pickup, so no throttling needed.
+        logging.info(f"[Autopickup] picked up {item_name} ({trigger})")
+    else:
+        # Can repeat every tick while aiming at something persistently
+        # refused (e.g. backpack full) - throttled like everything else
+        # SawPickupable can retrigger continuously.
+        log_throttled(now, f"[Autopickup] could not pick up {item_name} ({trigger}): {reason}")
 
 
 @hook("WillowGame.WillowPickup:SpawnPickupParticles", Type.POST)
