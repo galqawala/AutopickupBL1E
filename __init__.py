@@ -196,8 +196,34 @@ def collect_pickup(controller, pickupable) -> tuple[bool, str]:
     if controller.ShouldUseCoopRange(pickupable):
         controller.CloneAndGiveToCoopPawns(pickupable, False)
     controller.ClientSpawnPickupableMesh(pickupable)
+    # Captured before GiveTo destroys the pickup - compared by path name rather
+    # than Python object identity, which nothing here guarantees is stable.
+    pickup_path = pickupable._path_name()
     pickupable.GiveTo(controller.Pawn, False)
+    clear_stale_pickup_refs(controller, pickup_path)
     return True, "GiveTo"
+
+
+def clear_stale_pickup_refs(controller, pickup_path: str) -> None:
+    """Drop the controller's references to a pickup this mod just collected.
+
+    Collecting from inside the TouchedPickupable/SawPickupable POST hooks means
+    the native code has already stored the pickup in CurrentTouchedPickupable /
+    CurrentSeenPickupable, and GiveTo then destroys it without the engine ever
+    calling UnTouchedPickupable. Confirmed in play (via a ProcessEvent trace):
+    CurrentTouchedPickupable kept pointing at the deleted pickup (bDeleteMe=True,
+    Inventory=None) indefinitely, and because WillowPlayerController.Use checks
+    GetCurrentPickupable() first, every later Use press went to PickupSomething()
+    on that dead pickup instead of the chest/NPC/door being looked at - it failed
+    and showed "FULL", locking out all interaction until a level reload.
+    """
+    for prop in ("CurrentTouchedPickupable", "CurrentSeenPickupable"):
+        try:
+            current = getattr(controller, prop)
+            if current is not None and current._path_name() == pickup_path:
+                setattr(controller, prop, None)
+        except Exception as ex:  # noqa: BLE001
+            logging.warning(f"[Autopickup] could not clear {prop}: {ex!r}")
 
 
 def try_auto_collect(obj: UObject, trigger: str) -> None:
